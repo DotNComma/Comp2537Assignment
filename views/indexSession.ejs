@@ -1,0 +1,9 @@
+<%- include("templates/header") %>
+Hello <%=name%>!
+<form action='/members' method='get'>
+    <button id='members' name='members'>Go to Members Area</button>
+</form>
+<form action='/signOut' method='get'>
+    <button id='signout' name='signout'>Sign Out</button>
+</form>
+<%- include("templates/footer") %>

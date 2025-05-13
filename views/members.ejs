@@ -1,0 +1,14 @@
+<%- include("templates/header") %>
+Welcome <%=name%>
+<div class="row mb-3">
+    <div class="col-sm-4"><img class="img-fluid" src="/fluffyCat1.jpg" alt="Fluffy Cat 1"></div>
+    <div class="col-sm-4"><img class="img-fluid" src="/fluffyCat2.jpg" alt="Fluffy Cat 2"></div>
+    <div class="col-sm-4"><img class="img-fluid" src="/fluffyCat3.jpg" alt="Fluffy Cat 3"></div>
+</div>
+<form action="/admin" method="get">
+    <button id="admin" name="admin">Admin Page</button>
+</form>
+<form action="/signOut" method="get">
+    <button id="signout" name="signout">Sign Out</button>
+</form>
+<%- include("templates/footer") %>

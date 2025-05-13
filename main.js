@@ -24,7 +24,9 @@ const mongodb_session_secret = process.env.MONGODB_SESSION_SECRET;
 
 const node_session_secret = process.env.NODE_SESSION_SECRET;
 
+app.set('view engine', 'ejs');
 app.use(express.urlencoded({extended: false}));
+app.use(express.static('public'));
 
 var {database} = include('databaseConnection');
 
@@ -44,32 +46,83 @@ app.use(session({
         resave: true
 }));
 
+const navLinks = [
+    {
+        text: "Home",
+        redirect: "/"
+    },
+    {
+        text: "Sign Up",
+        redirect: "/signup"
+    },
+    {
+        text: "Log In",
+        redirect: "/login"
+    },
+    {
+        text: "Members",
+        redirect: "/members"
+    },
+    {
+        text: "Admin",
+        redirect: "/admin"
+    }
+];
+
+function isValidSession(req)
+{
+    if(req.session.authenticated)
+    {
+        return true;
+    }
+    return false;
+}
+
+function sessionValidation(req, res, next)
+{
+    if(isValidSession(req))
+    {
+        next();
+    }
+    else
+    {
+        res.redirect('/login');
+    }
+}
+
+function isAdmin(req)
+{
+    if(req.session.role == 'admin')
+    {
+        return true;
+    }
+    return false;
+}
+
+function adminAuthorization(req, res, next)
+{
+    if(isAdmin(req))
+    {
+        next();
+    }
+    else
+    {
+        res.status(403);
+        res.render("error", {message: "Not authorized", redirect: "/members", navLinks: navLinks});
+    }
+}
+
 app.get("/", async (req, res) => {
     if(req.session.authenticated)
     {
-        const result = await userCollection.find({email: req.session.email}).project({name: 1, id: 1}).toArray();
-        const name = result[0].name;
-
-        var html = `
-        Hello ${name}!
-        <form action='/members' method='get'>
-            <button id='members' name='members'>Go to Members Area</button>
-        </form>
-        <form action='/signOut' method='get'>
-            <button id='signout' name='signout'>Sign Out</button>
-        </form>    
-        `;
+        res.render("indexSession", {name: req.session.name, navLinks: navLinks});
+        return;
     }
     else 
     {
-        var html = `
-        <form action='/change' method='post'>
-            <button id='signup' name='signup' value='1'>Sign up</button>
-            <button id='login' name='login' value='1'>Log in</button>
-        </form>
-        `;
+        res.render("index", {navLinks: navLinks});
+        return;
     }
-    res.send(html);
 });
 
 app.post("/change", (req, res) => {
@@ -85,17 +138,25 @@ app.post("/change", (req, res) => {
     } 
 });
 
+app.post("/changeRole", async (req, res) => {
+    const email = req.body.roleChange;
+    const result = await userCollection.find({email: email}).project({name: 1, role: 1, id: 1}).toArray();
+    const role = result[0].role;
+    
+    if(role == 'user')
+    {
+        userCollection.updateOne({email: email}, {$set: {role: 'admin'}});
+    }
+    else if(role == 'admin')
+    {
+        userCollection.updateOne({email: email}, {$set: {role: 'user'}});
+    }
+
+    res.redirect("/admin");
+})
+
 app.get("/signup", (req, res) => {
-    var html = `
-    Create User
-    <form action='/signupUser' method='post'>
-        <input id='name' name='name' type='text' placeholder='name'></input>
-        <input id='email' name='email' type='text' placeholder='email'></input>
-        <input id='password' name='password' type='password' placeholder='password'></input>
-        <button id='submitSignUp' name='submitSignUp'>Submit</button>  
-    </form>
-    `
-    res.send(html);
+    res.render("signup", {navLinks: navLinks});
 })
 
 app.post("/signupUser", async (req, res) => {
@@ -123,23 +184,15 @@ app.post("/signupUser", async (req, res) => {
     await userCollection.insertOne({
         name: name,
         email: email,
-        password: hashedPassword
+        password: hashedPassword,
+        role: "user"
     });
-    console.log("User Inserted");
-
+    
     res.redirect("/");
 });
 
 app.get("/login", (req, res) => {
-    var html = `
-    Log in
-    <form action='/loginUser' method='post'>
-        <input id='email' name='email' type='text' placeholder='email'></input>
-        <input id='password' name='password' type='password' placeholder='password'></input>
-        <button id='submitSignUp' name='submitSignUp'>Submit</button>  
-    </form>
-    `
-    res.send(html);
+    res.render("login", {navLinks: navLinks});
 })
 
 app.post("/loginUser", async (req, res) => {
@@ -160,7 +213,7 @@ app.post("/loginUser", async (req, res) => {
         return;
     }
 
-    const result = await userCollection.find({email: email}).project({email: 1, password: 1, id: 1}).toArray();
+    const result = await userCollection.find({email: email}).project({email: 1, name: 1, password: 1, role: 1, id: 1}).toArray();
     if(result.length != 1)
     {
         console.log("User not found");
@@ -172,8 +225,10 @@ app.post("/loginUser", async (req, res) => {
     {
         req.session.authenticated = true;
         req.session.email = email;
+        req.session.name = result[0].name;
+        req.session.role = result[0].role;
         req.session.cookie.maxAge = expireTime;
-
+        
         res.redirect("/members");
         return;
     }
@@ -185,23 +240,13 @@ app.post("/loginUser", async (req, res) => {
     }
 });
 
-app.get("/members", async (req, res) => {
-    if(!req.session.authenticated)
-    {
-        res.redirect("/login");
-        return;
-    }
-    
-    const result = await userCollection.find({email: req.session.email}).project({name: 1, id: 1}).toArray();
-    const name = result[0].name;
+app.get("/members", sessionValidation, async (req, res) => {
+    res.render("members", {name: req.session.name, navLinks: navLinks});
+});
 
-    var html = `
-    Welcome ${name}
-    <form action="/signOut" method="get">
-        <button id="signout" name="signout">Sign Out</button>
-    </form>
-    `;
-    res.send(html);
+app.get("/admin", sessionValidation, adminAuthorization, async (req, res) => {
+    const result = await userCollection.find().project({email: 1, name: 1, role: 1, id: 1}).toArray();
+    res.render("admin", {users: result, navLinks: navLinks});
 });
 
 app.get("/signOut", (req, res) => {
@@ -211,7 +256,7 @@ app.get("/signOut", (req, res) => {
 
 app.get("*", (req, res) => {
     res.status(404);
-    res.send("Page not found - 404");
+    res.render("error", {message: "Page not found - 404", redirect: "/", navLinks: navLinks});
 });  
 
 app.listen(port, () => {

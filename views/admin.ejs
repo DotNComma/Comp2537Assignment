@@ -1,0 +1,11 @@
+<%- include("templates/header") %>
+<% for(let i=0; i < users.length; i++) { %>
+    <li>
+        <%=users[i].name%> (<%=users[i].role%>)
+                <form action="/changeRole" method="post">
+                    <button id="roleChange" name="roleChange" value="<%=users[i].email%>">Change role</button>
+                </form>
+
+    </li>
+<% } %>
+<%- include("templates/footer") %>
